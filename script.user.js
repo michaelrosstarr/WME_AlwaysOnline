@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        WME Always Visible (BushmanZA Edition)
 // @namespace   https://wme.michaelrosstarr.com/
-// @version     2
+// @version     2.1
 // @description Makes your user status always visible in Waze Map Editor.
 // @author      https://github.com/michaelrosstarr
 // @include 	/^https:\/\/(www|beta)\.waze\.com\/(?!user\/)(.{2,6}\/)?editor.*$/
