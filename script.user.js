@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        WME Always Visible (BushmanZA Edition)
 // @namespace   https://wme.michaelrosstarr.com/
-// @version     1.3
+// @version     2
 // @description Makes your user status always visible in Waze Map Editor.
 // @author      https://github.com/michaelrosstarr
 // @include 	/^https:\/\/(www|beta)\.waze\.com\/(?!user\/)(.{2,6}\/)?editor.*$/
@@ -22,7 +22,7 @@
 const SCRIPT_INFO = {
     name: GM_info.script.name,
     version: GM_info.script.version,
-    debugMode: false // Set to true to enable verbose logging
+    debugMode: true // Set to true to enable verbose logging
 };
 
 // Global variables
@@ -56,6 +56,31 @@ const createObserver = (callback, options = { childList: true, subtree: true }) 
         console.error('WME_AV: Error creating observer:', error);
         return null;
     }
+};
+
+/**
+ * Helper function to find elements in shadow DOM
+ * @param {Element} root - Root element to start search from
+ * @param {string} selector - CSS selector to find
+ * @returns {Element|null} - Found element or null
+ */
+const findInShadowDOM = (root, selector) => {
+    if (!root) return null;
+
+    // Check in the current element
+    const element = root.querySelector(selector);
+    if (element) return element;
+
+    // Look through all children with shadow roots
+    const shadowElements = Array.from(root.querySelectorAll('*'))
+        .filter(el => el.shadowRoot);
+
+    for (const el of shadowElements) {
+        const found = findInShadowDOM(el.shadowRoot, selector);
+        if (found) return found;
+    }
+
+    return null;
 };
 
 /**
@@ -128,44 +153,113 @@ const observeOnlineEditors = (onlineEditors) => {
  * @param {Element} onlineEditors - Online editors DOM element
  */
 const makeEditorVisible = (onlineEditors) => {
-    const bubbleButton = onlineEditors.querySelector('wz-button');
+    // First, locate the bubble button that opens the editors panel
+    const bubbleButton = onlineEditors.querySelector('wz-button.online-editors-bubble');
     if (!bubbleButton) {
         log('Bubble button not found');
         return;
     }
 
-    // Open the online editors panel
-    bubbleButton.click();
-    log('Bubble button clicked');
+    log('Found online editors bubble button');
 
-    const observer = createObserver((mutations, observer) => {
-        const label = onlineEditors.querySelector('.editor-visibility-label');
+    // Define a function to handle the sequence of actions
+    const processVisibility = () => {
+        // Step 1: Open the panel by clicking the bubble button
+        bubbleButton.click();
+        log('Clicked bubble button to open editor panel');
 
-        if (label && label.textContent === '(invisible)') {
-            log('Editor is invisible, making visible');
+        // Step 2: Wait for panel to load completely
+        setTimeout(() => {
+            // Check if user is invisible
+            const label = onlineEditors.querySelector('.editor-visibility-label');
+            if (label && label.textContent === '(invisible)') {
+                log('Editor is invisible, will attempt to make visible');
 
-            const wzButton = onlineEditors.querySelector('wz-button[disabled="false"][color="clear-icon"][size="md"]');
-            if (wzButton) {
-                const button = wzButton.shadowRoot.querySelector('button');
-                if (button) {
-                    button.click();
-                    log('Visibility button clicked');
-                }
-            }
+                // Step 3: Find and click the visibility button
+                setTimeout(() => {
+                    try {
+                        // Try multiple methods to find the visibility button
 
-            // Close the panel after making visible
-            bubbleButton.click();
-            observer.disconnect();
-        } else if (label && label.textContent === '(visible)') {
-            // Close the panel if already visible
-            if (document.querySelector('#online-editors').childElementCount > 0) {
+                        // Method 1: Use tooltip to find the button
+                        const tooltip = onlineEditors.querySelector('wz-basic-tooltip');
+                        if (tooltip) {
+                            log('Found tooltip element');
+
+                            // Try to find the button through wz-button element first
+                            const wzButton = tooltip.querySelector('wz-button');
+                            if (wzButton && wzButton.shadowRoot) {
+                                const shadowButton = wzButton.shadowRoot.querySelector('button');
+                                if (shadowButton) {
+                                    shadowButton.click();
+                                    log('Clicked visibility button via wz-button shadow DOM');
+
+                                    // Wait and then close the panel
+                                    setTimeout(() => {
+                                        bubbleButton.click();
+                                        log('Closed editor panel after making visible');
+                                    }, 500);
+
+                                    return;
+                                }
+                            }
+
+                            // If direct shadow button didn't work, try getting the button through the icon
+                            const invisibilityIcon = onlineEditors.querySelector('.w-icon-invisible');
+                            if (invisibilityIcon) {
+                                const parentButton = invisibilityIcon.closest('wz-button');
+                                if (parentButton) {
+                                    parentButton.click();
+                                    log('Clicked visibility button via icon parent');
+
+                                    // Wait and then close the panel
+                                    setTimeout(() => {
+                                        bubbleButton.click();
+                                        log('Closed editor panel after making visible');
+                                    }, 500);
+
+                                    return;
+                                }
+                            }
+
+                            // Last resort - click the tooltip directly
+                            tooltip.click();
+                            log('Clicked tooltip directly');
+                        } else {
+                            log('Tooltip not found, trying alternative methods');
+
+                            // Try to find any button with the invisible icon
+                            const buttons = Array.from(onlineEditors.querySelectorAll('wz-button'));
+                            for (const btn of buttons) {
+                                const iconElement = btn.querySelector('i.w-icon-invisible');
+                                if (iconElement) {
+                                    btn.click();
+                                    log('Found and clicked button with invisible icon');
+                                    break;
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.error('WME_AV: Error clicking visibility button:', error);
+                    }
+
+                    // Close the panel regardless of success/failure
+                    setTimeout(() => {
+                        bubbleButton.click();
+                        log('Closed editor panel');
+                    }, 500);
+                }, 500); // Wait for elements to be fully rendered
+            } else if (label && label.textContent === '(visible)') {
+                log('Editor is already visible, closing panel');
+                // Just close the panel if already visible
                 bubbleButton.click();
-                observer.disconnect();
+            } else {
+                log('Could not determine editor visibility status');
+                // Close the panel if status can't be determined
+                bubbleButton.click();
             }
-        }
-    });
+        }, 1000); // Give enough time for panel to load
+    };
 
-    if (observer) {
-        observer.observe(onlineEditors, { childList: true, subtree: true });
-    }
+    // Start the process
+    processVisibility();
 };
