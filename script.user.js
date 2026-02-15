@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        WME Always Visible (BushmanZA Edition)
 // @namespace   https://wme.michaelrosstarr.com/
-// @version     2.3
+// @version     2.4
 // @description Makes your user status always visible in Waze Map Editor.
 // @author      https://github.com/michaelrosstarr
 // @include 	/^https:\/\/(www|beta)\.waze\.com\/(?!user\/)(.{2,6}\/)?editor.*$/
@@ -312,22 +312,23 @@ const clickTargetButton = () => {
  * Find and click the visibility button
  */
 const clickVisibilityButton = () => {
-    log('Looking for target button (wz-button with clear-icon md icon-only)');
+    log('Looking for target button (wz-button[color="clear-icon"][size="md"] with w-icon-invisible)');
 
-    // Search through all wz-button elements
-    const wzButtons = document.querySelectorAll('wz-button');
+    // Search through all wz-button elements with the right attributes
+    const wzButtons = document.querySelectorAll('wz-button[color="clear-icon"][size="md"]');
+
+    log(`Found ${wzButtons.length} wz-button elements with color="clear-icon" and size="md"`);
 
     for (const wzButton of wzButtons) {
-        // Check if this wz-button has the right classes
-        if (wzButton.classList.contains('clear-icon') &&
-            wzButton.classList.contains('md') &&
-            wzButton.classList.contains('icon-only')) {
+        // Check if this wz-button contains the invisible icon
+        const invisibleIcon = wzButton.querySelector('i.w-icon-invisible');
 
-            log('Found target wz-button element with icon-only class');
+        if (invisibleIcon) {
+            log('Found target wz-button element with w-icon-invisible icon!');
 
             // Try to click the shadow DOM button
             if (wzButton.shadowRoot) {
-                const shadowButton = wzButton.shadowRoot.querySelector('button.wz-button.clear-icon.md.icon-only');
+                const shadowButton = wzButton.shadowRoot.querySelector('button');
                 if (shadowButton) {
                     shadowButton.click();
                     log('SUCCESS: Clicked target button via shadow DOM');
@@ -346,7 +347,7 @@ const clickVisibilityButton = () => {
 
             // Fallback: click the wz-button directly
             wzButton.click();
-            log('Clicked target wz-button directly');
+            log('Clicked target wz-button directly (fallback)');
 
             // Close the panel after clicking
             setTimeout(() => {
@@ -360,7 +361,7 @@ const clickVisibilityButton = () => {
         }
     }
 
-    log('Target button not found');
+    log('Target button not found - no button with w-icon-invisible icon');
 };
 
 /**
