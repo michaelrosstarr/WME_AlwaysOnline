@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        WME Always Visible (BushmanZA Edition)
 // @namespace   https://wme.michaelrosstarr.com/
-// @version     2.2
+// @version     2.3
 // @description Makes your user status always visible in Waze Map Editor.
 // @author      https://github.com/michaelrosstarr
 // @include 	/^https:\/\/(www|beta)\.waze\.com\/(?!user\/)(.{2,6}\/)?editor.*$/
@@ -241,6 +241,129 @@ const bootstrap = () => {
 };
 
 /**
+ * Click the specific button on page load
+ */
+const clickTargetButton = () => {
+    log('Starting sequence to click target button');
+
+    // Step 1: Find the online-editors-bubble button
+    const bubbleButton = document.querySelector('wz-button.online-editors-bubble');
+    if (!bubbleButton) {
+        log('Online editors bubble button not found, observing...');
+
+        // Observe for it to appear
+        const bubbleObserver = createObserver((mutations, observer) => {
+            const bubble = document.querySelector('wz-button.online-editors-bubble');
+            if (bubble) {
+                log('Found bubble button via observer');
+                observer.disconnect();
+                clickTargetButton(); // Retry now that button exists
+            }
+        });
+
+        if (bubbleObserver) {
+            bubbleObserver.observe(document.body, { childList: true, subtree: true });
+            setTimeout(() => bubbleObserver.disconnect(), 10000);
+        }
+        return;
+    }
+
+    log('Found online-editors-bubble button, clicking...');
+
+    // Click the bubble button to open the panel
+    bubbleButton.click();
+
+    // Step 2: Wait for the list to appear
+    setTimeout(() => {
+        const listWrapper = document.querySelector('wz-list.online-editors-list-wrapper');
+        if (!listWrapper) {
+            log('List wrapper not found, will wait longer...');
+
+            // If not found immediately, observe for it
+            const listObserver = createObserver((mutations, observer) => {
+                const list = document.querySelector('wz-list.online-editors-list-wrapper');
+                if (list) {
+                    log('List wrapper appeared');
+                    observer.disconnect();
+
+                    // Now find and click the target button
+                    setTimeout(() => {
+                        clickVisibilityButton();
+                    }, 500);
+                }
+            });
+
+            if (listObserver) {
+                listObserver.observe(document.body, { childList: true, subtree: true });
+                setTimeout(() => listObserver.disconnect(), 5000);
+            }
+        } else {
+            log('List wrapper found, proceeding to click target button');
+
+            // Step 3: Click the target button
+            setTimeout(() => {
+                clickVisibilityButton();
+            }, 500);
+        }
+    }, 1000);
+};
+
+/**
+ * Find and click the visibility button
+ */
+const clickVisibilityButton = () => {
+    log('Looking for target button (wz-button with clear-icon md icon-only)');
+
+    // Search through all wz-button elements
+    const wzButtons = document.querySelectorAll('wz-button');
+
+    for (const wzButton of wzButtons) {
+        // Check if this wz-button has the right classes
+        if (wzButton.classList.contains('clear-icon') &&
+            wzButton.classList.contains('md') &&
+            wzButton.classList.contains('icon-only')) {
+
+            log('Found target wz-button element with icon-only class');
+
+            // Try to click the shadow DOM button
+            if (wzButton.shadowRoot) {
+                const shadowButton = wzButton.shadowRoot.querySelector('button.wz-button.clear-icon.md.icon-only');
+                if (shadowButton) {
+                    shadowButton.click();
+                    log('SUCCESS: Clicked target button via shadow DOM');
+
+                    // Close the panel after clicking
+                    setTimeout(() => {
+                        const bubbleButton = document.querySelector('wz-button.online-editors-bubble');
+                        if (bubbleButton) {
+                            bubbleButton.click();
+                            log('Closed online editors panel');
+                        }
+                    }, 500);
+                    return;
+                }
+            }
+
+            // Fallback: click the wz-button directly
+            wzButton.click();
+            log('Clicked target wz-button directly');
+
+            // Close the panel after clicking
+            setTimeout(() => {
+                const bubbleButton = document.querySelector('wz-button.online-editors-bubble');
+                if (bubbleButton) {
+                    bubbleButton.click();
+                    log('Closed online editors panel');
+                }
+            }, 500);
+            return;
+        }
+    }
+
+    log('Target button not found');
+};
+
+/**
  * Main initialization function
  */
 const init = async () => {
@@ -248,6 +371,11 @@ const init = async () => {
 
     // Create settings tab
     await createSettingsTab();
+
+    // Click the target button after Waze initializes
+    setTimeout(() => {
+        clickTargetButton();
+    }, 2000);
 
     // Only run auto-visibility if enabled
     if (!settings.autoVisible) {
